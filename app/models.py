@@ -12,6 +12,11 @@ class Organisation(Base, table=True):
     id: int | None = Field(primary_key=True)
     name: str
 
+class CreateLocation(Base):
+    organisation_id: int
+    location_name: str
+    longitude: float
+    latitude: float
 
 class Location(Base, table=True):
     id: int | None = Field(primary_key=True)

@@ -61,4 +61,69 @@ def test_organisation_endpoints(test_client: TestClient) -> None:
     # Validate that created organisations can be retried via API
     response = test_client.get("/api/organisations")
     organisations = set(organisation["name"] for organisation in response.json())
-    assert  set(organisations) == created_organisation_names
+    assert set(organisations) == created_organisation_names
+
+
+def test_get_single_organisation(test_client: TestClient) -> None:
+    response = test_client.post("/api/organisations/create", json={"name": "Test Organisation"})
+    assert response.status_code == status.HTTP_200_OK
+    organisation_id = response.json()["id"]
+
+    # Fetch the created organisation by ID
+    response = test_client.get(f"/api/organisations/{organisation_id}")
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json()["name"] == "Test Organisation"
+
+    # Test with a non-existing organisation ID
+    response = test_client.get("/api/organisations/99999")
+    assert response.status_code == status.HTTP_404_NOT_FOUND
+
+
+def test_create_and_get_locations(test_client: TestClient) -> None:
+    # Create an organisation to associate locations with
+    response = test_client.post("/api/organisations/create", json={"name": "Test Organisation for Locations"})
+    assert response.status_code == status.HTTP_200_OK
+    organisation_id = response.json()["id"]
+
+    # Create locations associated with the organisation
+    location_data = [
+        {"organisation_id": organisation_id, "location_name": "Location 1", "longitude": 10, "latitude": 20},
+        {"organisation_id": organisation_id, "location_name": "Location 2", "longitude": 15, "latitude": 25}
+    ]
+    for location in location_data:
+        response = test_client.post("/api/organisations/create/locations", json=location)
+        assert response.status_code == status.HTTP_200_OK
+
+    # Retrieve all locations for the organisation
+    response = test_client.get(f"/api/organisations/{organisation_id}/locations")
+    assert response.status_code == status.HTTP_200_OK
+    retrieved_locations = response.json()
+    assert len(retrieved_locations) == 2
+    assert {loc["location_name"] for loc in retrieved_locations} == {"Location 1", "Location 2"}
+
+
+def test_get_locations_with_bounding_box(test_client: TestClient) -> None:
+    # Create an organisation to associate locations with
+    response = test_client.post("/api/organisations/create", json={"name": "Organisation with Bounding Box"})
+    assert response.status_code == status.HTTP_200_OK
+    organisation_id = response.json()["id"]
+
+    # Create locations associated with the organisation
+    location_data = [
+        {"organisation_id": organisation_id, "location_name": "Location A", "longitude": 10, "latitude": 20},
+        {"organisation_id": organisation_id, "location_name": "Location B", "longitude": 15, "latitude": 25},
+        {"organisation_id": organisation_id, "location_name": "Location C", "longitude": 30, "latitude": 35}
+    ]
+    for location in location_data:
+        response = test_client.post("/api/organisations/create/locations", json=location)
+        assert response.status_code == status.HTTP_200_OK
+
+    # Retrieve locations within the bounding box
+    bounding_box_params = {'bounding_box': (10,10,25,25)}
+    response = test_client.get(f"/api/organisations/{organisation_id}/locations", params=bounding_box_params)
+    assert response.status_code == status.HTTP_200_OK
+
+    # Validate that only Location A and Location B are returned
+    retrieved_locations = response.json()
+    location_names = {loc["location_name"] for loc in retrieved_locations}
+    assert location_names == {"Location A", "Location B"}
